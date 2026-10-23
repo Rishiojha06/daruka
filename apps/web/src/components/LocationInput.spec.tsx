@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { LocationInput } from './LocationInput';
 
@@ -39,17 +39,52 @@ describe('LocationInput', () => {
     });
   });
 
-  it('shows error message for non-coordinate text', () => {
+  it('displays autocomplete dropdown when typing place names and selects an option', async () => {
     const onChange = vi.fn();
     render(<LocationInput {...defaultProps} onChange={onChange} />);
 
     const input = screen.getByPlaceholderText(/enter coordinates/i);
-    fireEvent.change(input, { target: { value: 'some random text' } });
+    fireEvent.change(input, { target: { value: 'Nandi' } });
+
+    // Wait for dropdown to open
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(screen.getByText(/nandi hills/i)).toBeInTheDocument();
+    });
+
+    // Click the suggestion
+    const suggestionOption = screen.getByRole('option', { name: /nandi hills/i });
+    fireEvent.click(suggestionOption);
+
+    expect(onChange).toHaveBeenCalledWith({
+      label: 'Nandi Hills',
+      coordinates: { lat: 13.3702, lng: 77.6835 },
+      confirmed: true,
+      error: undefined,
+    });
+  });
+
+  it('navigates autocomplete dropdown using keyboard', async () => {
+    const onChange = vi.fn();
+    render(<LocationInput {...defaultProps} onChange={onChange} />);
+
+    const input = screen.getByPlaceholderText(/enter coordinates/i);
+    fireEvent.change(input, { target: { value: 'Koramangala' } });
+
+    await waitFor(() => {
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+    });
+
+    // Press ArrowDown to highlight first suggestion
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+
+    // Press Enter to select
+    fireEvent.keyDown(input, { key: 'Enter' });
 
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        confirmed: false,
-        error: expect.stringContaining('Enter valid coordinates'),
+        confirmed: true,
+        coordinates: expect.objectContaining({ lat: 12.9352, lng: 77.6245 }),
       }),
     );
   });

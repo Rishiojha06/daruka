@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Coordinates } from '@weekend-ride/shared-types';
+import { PlaceSuggestion, searchLocationSuggestions } from '../services/autocomplete.service';
 import { LocationState } from '../types';
-import { parseCoordinates, formatCoordinates } from '../utils/coordinates';
+import { formatCoordinates, parseCoordinates } from '../utils/coordinates';
 import './LocationInput.css';
 
 interface PresetOption {
@@ -25,7 +26,7 @@ interface LocationInputProps {
 export const LocationInput: React.FC<LocationInputProps> = ({
   id,
   label,
-  placeholder = 'Enter address or lat, lng',
+  placeholder = 'Type place name (e.g. Indiranagar, Nandi Hills) or coordinates',
   markerLetter,
   markerColor,
   value,
@@ -37,24 +38,89 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
 
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const text = e.target.value;
-    const parsed = parseCoordinates(text);
+    const parsedCoords = parseCoordinates(text);
 
-    if (parsed) {
+    if (parsedCoords) {
+      // User entered exact coordinates
+      setSuggestions([]);
+      setIsDropdownOpen(false);
       onChange({
         label: text,
-        coordinates: parsed,
+        coordinates: parsedCoords,
         confirmed: true,
         error: undefined,
       });
+      return;
+    }
+
+    // Unconfirmed text while typing
+    onChange({
+      label: text,
+      coordinates: null,
+      confirmed: false,
+      error: undefined,
+    });
+
+    if (text.trim().length >= 2) {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = setTimeout(async () => {
+        const results = await searchLocationSuggestions(text);
+        setSuggestions(results);
+        setIsDropdownOpen(results.length > 0);
+        setHighlightedIndex(-1);
+      }, 150);
     } else {
-      onChange({
-        label: text,
-        coordinates: null,
-        confirmed: false,
-        error: text.trim().length > 0 ? 'Enter valid coordinates (e.g. 12.9716, 77.5946) or pick a preset' : undefined,
-      });
+      setSuggestions([]);
+      setIsDropdownOpen(false);
+    }
+  };
+
+  const handleSuggestionSelect = (suggestion: PlaceSuggestion) => {
+    onChange({
+      label: suggestion.mainText,
+      coordinates: suggestion.coordinates,
+      confirmed: true,
+      error: undefined,
+    });
+    setSuggestions([]);
+    setIsDropdownOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!isDropdownOpen || suggestions.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev + 1 < suggestions.length ? prev + 1 : 0));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : suggestions.length - 1));
+    } else if (e.key === 'Enter') {
+      if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
+        e.preventDefault();
+        handleSuggestionSelect(suggestions[highlightedIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      setIsDropdownOpen(false);
     }
   };
 
@@ -65,6 +131,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       confirmed: true,
       error: undefined,
     });
+    setIsDropdownOpen(false);
   };
 
   const handleGeolocation = () => {
@@ -75,6 +142,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
 
     setGeoLoading(true);
     setGeoError(null);
+    setIsDropdownOpen(false);
 
     navigator.geolocation.getCurrentPosition(
       (pos) => {
@@ -104,6 +172,8 @@ export const LocationInput: React.FC<LocationInputProps> = ({
 
   const handleClear = () => {
     setGeoError(null);
+    setSuggestions([]);
+    setIsDropdownOpen(false);
     onChange({
       label: '',
       coordinates: null,
@@ -112,7 +182,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   };
 
   return (
-    <div className="location-input-group">
+    <div className="location-input-group" ref={wrapperRef}>
       <div className="location-header">
         <label htmlFor={id} className="location-label">
           <span
@@ -139,6 +209,15 @@ export const LocationInput: React.FC<LocationInputProps> = ({
           placeholder={placeholder}
           value={value.label}
           onChange={handleTextChange}
+          onKeyDown={handleKeyDown}
+          onFocus={() => {
+            if (suggestions.length > 0 && !value.confirmed) {
+              setIsDropdownOpen(true);
+            }
+          }}
+          autoComplete="off"
+          aria-autocomplete="list"
+          aria-expanded={isDropdownOpen}
           aria-describedby={value.error ? `${id}-error` : undefined}
         />
         {value.label && (
@@ -150,6 +229,38 @@ export const LocationInput: React.FC<LocationInputProps> = ({
           >
             ✕
           </button>
+        )}
+
+        {/* Autocomplete Dropdown List */}
+        {isDropdownOpen && suggestions.length > 0 && (
+          <ul
+            className="autocomplete-dropdown"
+            role="listbox"
+            aria-label={`Location suggestions for ${label}`}
+          >
+            {suggestions.map((suggestion, index) => {
+              const isHighlighted = highlightedIndex === index;
+              return (
+                <li
+                  key={suggestion.id}
+                  className={`autocomplete-item ${isHighlighted ? 'item-highlighted' : ''}`}
+                  role="option"
+                  aria-selected={isHighlighted}
+                  onClick={() => handleSuggestionSelect(suggestion)}
+                >
+                  <span className="item-icon" aria-hidden="true">
+                    📍
+                  </span>
+                  <div className="item-text-group">
+                    <span className="item-main">{suggestion.mainText}</span>
+                    {suggestion.secondaryText && (
+                      <span className="item-sub">{suggestion.secondaryText}</span>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
