@@ -1,0 +1,31 @@
+.app-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.app-header {
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 1rem;
+}
+
+.app-header h1 {
+  font-size: 1.75rem;
+  color: #0f172a;
+}
+
+.app-header p {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.beta-disclaimer {
+  background-color: #fef3c7;
+  border-left: 4px solid #f59e0b;
+  color: #92400e;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+}
