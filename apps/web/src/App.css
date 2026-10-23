@@ -29,3 +29,28 @@
   margin-bottom: 1.5rem;
   font-size: 0.875rem;
 }
+
+.app-main-grid {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .app-main-grid {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    align-items: start;
+    gap: 2rem;
+  }
+}
+
+.form-column {
+  width: 100%;
+}
+
+.map-column {
+  width: 100%;
+  position: sticky;
+  top: 1rem;
+}
