@@ -6,8 +6,8 @@ describe('AutocompleteService', () => {
     const results = await searchLocationSuggestions('nandi');
     expect(results.length).toBeGreaterThan(0);
     expect(results[0].mainText).toContain('Nandi Hills');
-    expect(results[0].coordinates.lat).toBeCloseTo(13.3702, 2);
-    expect(results[0].coordinates.lng).toBeCloseTo(77.6835, 2);
+    expect(results[0].coordinates?.lat).toBeCloseTo(13.3702, 2);
+    expect(results[0].coordinates?.lng).toBeCloseTo(77.6835, 2);
   });
 
   it('performs case-insensitive search for Koramangala', async () => {
