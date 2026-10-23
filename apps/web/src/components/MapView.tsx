@@ -22,6 +22,8 @@ export const MapView: React.FC<MapViewProps> = ({
   destinationLocation,
   activePinTarget,
   onMapClickCoordinate,
+  riderARoute,
+  riderBRoute,
   recommendations = [],
   selectedCandidateId,
   onSelectCandidate,
@@ -110,31 +112,55 @@ export const MapView: React.FC<MapViewProps> = ({
           <line x1="20" y1="20" x2="80" y2="80" stroke="#cbd5e1" strokeWidth="0.8" strokeDasharray="1,1" />
           <line x1="15" y1="70" x2="85" y2="30" stroke="#cbd5e1" strokeWidth="0.8" strokeDasharray="1,1" />
 
-          {/* Direct approach guides if locations are placed */}
-          {riderALocation && destinationLocation && (
-            <line
-              x1={projectToSvg(riderALocation).x}
-              y1={projectToSvg(riderALocation).y}
-              x2={projectToSvg(destinationLocation).x}
-              y2={projectToSvg(destinationLocation).y}
+          {/* Route polylines if route geometry is available */}
+          {riderARoute?.geometry && riderARoute.geometry.length > 1 ? (
+            <polyline
+              points={riderARoute.geometry.map((p: Coordinates) => `${projectToSvg(p).x},${projectToSvg(p).y}`).join(' ')}
+              fill="none"
               stroke="#2563eb"
-              strokeWidth="1.2"
-              strokeDasharray="2,2"
-              opacity="0.6"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
+          ) : (
+            riderALocation &&
+            destinationLocation && (
+              <line
+                x1={projectToSvg(riderALocation).x}
+                y1={projectToSvg(riderALocation).y}
+                x2={projectToSvg(destinationLocation).x}
+                y2={projectToSvg(destinationLocation).y}
+                stroke="#2563eb"
+                strokeWidth="1.2"
+                strokeDasharray="2,2"
+                opacity="0.6"
+              />
+            )
           )}
 
-          {riderBLocation && destinationLocation && (
-            <line
-              x1={projectToSvg(riderBLocation).x}
-              y1={projectToSvg(riderBLocation).y}
-              x2={projectToSvg(destinationLocation).x}
-              y2={projectToSvg(destinationLocation).y}
+          {riderBRoute?.geometry && riderBRoute.geometry.length > 1 ? (
+            <polyline
+              points={riderBRoute.geometry.map((p: Coordinates) => `${projectToSvg(p).x},${projectToSvg(p).y}`).join(' ')}
+              fill="none"
               stroke="#059669"
-              strokeWidth="1.2"
-              strokeDasharray="2,2"
-              opacity="0.6"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+              strokeLinecap="round"
             />
+          ) : (
+            riderBLocation &&
+            destinationLocation && (
+              <line
+                x1={projectToSvg(riderBLocation).x}
+                y1={projectToSvg(riderBLocation).y}
+                x2={projectToSvg(destinationLocation).x}
+                y2={projectToSvg(destinationLocation).y}
+                stroke="#059669"
+                strokeWidth="1.2"
+                strokeDasharray="2,2"
+                opacity="0.6"
+              />
+            )
           )}
 
           {/* Markers */}

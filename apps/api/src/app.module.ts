@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
 import { HealthModule } from './health/health.module';
+import { MeetingPointModule } from './meeting-points/meeting-point.module';
+import { RoutingModule } from './routing/routing.module';
 
 @Module({
   imports: [
@@ -12,6 +14,8 @@ import { HealthModule } from './health/health.module';
       validate,
     }),
     HealthModule,
+    RoutingModule,
+    MeetingPointModule,
   ],
 })
 export class AppModule {}

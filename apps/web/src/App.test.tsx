@@ -1,8 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import App from './App';
+import * as api from './services/api';
+import { MeetingPointSearchResponse } from '@weekend-ride/shared-types';
 
 describe('App', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it('renders application header, disclaimer, and map', () => {
     render(<App />);
     expect(screen.getByRole('heading', { level: 1, name: /weekend ride/i })).toBeInTheDocument();
@@ -17,41 +23,68 @@ describe('App', () => {
     expect(screen.getByRole('textbox', { name: /shared destination/i })).toBeInTheDocument();
   });
 
-  it('allows user to confirm locations using presets', () => {
+  it('allows user to confirm locations using presets and submit search', async () => {
+    const mockResponse: MeetingPointSearchResponse = {
+      status: 'ok',
+      generatedAt: new Date().toISOString(),
+      routes: {
+        riderA: { distanceMeters: 45000, durationSeconds: 3600, geometry: [] },
+        riderB: { distanceMeters: 40000, durationSeconds: 3200, geometry: [] },
+      },
+      recommendations: [
+        {
+          id: 'rec-1',
+          name: 'Highway Cafe & Fuel',
+          category: 'fuel_station',
+          location: { lat: 13.1, lng: 77.62 },
+          travel: {
+            riderASeconds: 1800,
+            riderBSeconds: 1800,
+            arrivalDifferenceSeconds: 0,
+            toDestinationSeconds: 1500,
+          },
+          detour: {
+            riderASeconds: 180,
+            riderBSeconds: 240,
+          },
+          score: 10.5,
+          navigationUrl: 'https://maps.google.com/?destination=13.1,77.62',
+        },
+      ],
+      warnings: [],
+    };
+
+    vi.spyOn(api, 'searchMeetingPoints').mockResolvedValue(mockResponse);
+
     render(<App />);
 
-    // Click Rider A preset (Whitefield)
-    const whitefieldBtn = screen.getByRole('button', { name: /whitefield/i });
-    fireEvent.click(whitefieldBtn);
+    // Click presets
+    fireEvent.click(screen.getByRole('button', { name: /whitefield/i }));
+    fireEvent.click(screen.getByRole('button', { name: /koramangala/i }));
+    fireEvent.click(screen.getByRole('button', { name: /nandi hills/i }));
 
-    // Click Rider B preset (Koramangala)
-    const koramangalaBtn = screen.getByRole('button', { name: /koramangala/i });
-    fireEvent.click(koramangalaBtn);
-
-    // Click Destination preset (Nandi Hills)
-    const nandiHillsBtn = screen.getByRole('button', { name: /nandi hills/i });
-    fireEvent.click(nandiHillsBtn);
-
-    // Find Meeting Point should now be enabled
     const submitBtn = screen.getByRole('button', { name: /find meeting point/i });
     expect(submitBtn).toBeEnabled();
+
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: /recommended meeting points/i })).toBeInTheDocument();
+      expect(screen.getByText('Highway Cafe & Fuel')).toBeInTheDocument();
+    });
   });
 
   it('sets coordinates on map click when pin target is active', () => {
     render(<App />);
 
-    // Activate pin pick for Rider A
     const pickMapBtns = screen.getAllByRole('button', { name: /pick on map/i });
     fireEvent.click(pickMapBtns[0]); // Rider A
 
-    // Notice appears
     expect(screen.getByText(/click map to set/i)).toBeInTheDocument();
 
-    // Click map
     const mapSvg = screen.getByRole('region', { name: /interactive route and location map/i });
     fireEvent.click(mapSvg, { clientX: 50, clientY: 50 });
 
-    // Rider A input now shows Map Pin coordinates
     const riderAInput = screen.getByRole('textbox', { name: /rider a starting point/i }) as HTMLInputElement;
     expect(riderAInput.value).toContain('Map Pin');
   });

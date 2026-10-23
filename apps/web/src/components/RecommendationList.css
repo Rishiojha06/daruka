@@ -1,0 +1,80 @@
+.recommendations-section {
+  margin-top: 1.5rem;
+}
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.results-header h2 {
+  font-size: 1.25rem;
+  color: #0f172a;
+}
+
+.results-count {
+  font-size: 0.8rem;
+  color: #64748b;
+  background-color: #f1f5f9;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.ranking-explanation {
+  font-size: 0.85rem;
+  color: #475569;
+  margin-bottom: 1rem;
+}
+
+.cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.no-candidates-panel {
+  background-color: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.no-candidates-icon {
+  font-size: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+.no-candidates-panel h3 {
+  color: #92400e;
+  font-size: 1.15rem;
+  margin-bottom: 0.5rem;
+}
+
+.no-candidates-desc {
+  color: #78350f;
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+
+.suggestion-box {
+  background-color: #ffffff;
+  border: 1px solid #fef3c7;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  text-align: left;
+  font-size: 0.85rem;
+  color: #451a03;
+}
+
+.suggestion-box ul {
+  margin-left: 1.25rem;
+  margin-top: 0.35rem;
+}
+
+.suggestion-box li {
+  margin-bottom: 0.25rem;
+}

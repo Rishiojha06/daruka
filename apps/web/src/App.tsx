@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
-import { Coordinates, RecommendationCandidate, RouteSummary } from '@weekend-ride/shared-types';
+import {
+  Coordinates,
+  MeetingPointSearchRequest,
+  RecommendationCandidate,
+  RouteSummary,
+} from '@weekend-ride/shared-types';
 import { LocationForm } from './components/LocationForm';
 import { MapView } from './components/MapView';
-import { LocationState, ActivePinTarget } from './types';
+import { RecommendationList } from './components/RecommendationList';
+import { searchMeetingPoints } from './services/api';
+import { ActivePinTarget, LocationState } from './types';
 import { formatCoordinates } from './utils/coordinates';
 import './App.css';
 
@@ -21,9 +28,11 @@ export const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const [riderARoute] = useState<RouteSummary | undefined>();
-  const [riderBRoute] = useState<RouteSummary | undefined>();
-  const [recommendations] = useState<RecommendationCandidate[]>([]);
+  const [searchStatus, setSearchStatus] = useState<'idle' | 'ok' | 'no_candidates' | 'error'>('idle');
+  const [warningMessage, setWarningMessage] = useState<string | undefined>();
+  const [riderARoute, setRiderARoute] = useState<RouteSummary | undefined>();
+  const [riderBRoute, setRiderBRoute] = useState<RouteSummary | undefined>();
+  const [recommendations, setRecommendations] = useState<RecommendationCandidate[]>([]);
   const [selectedCandidateId, setSelectedCandidateId] = useState<string | null>(null);
 
   const handleMapClickCoordinate = (coords: Coordinates) => {
@@ -60,14 +69,44 @@ export const App: React.FC = () => {
 
     setFormError(null);
     setIsLoading(true);
+    setSearchStatus('idle');
+
+    const requestPayload: MeetingPointSearchRequest = {
+      riders: [
+        { id: 'rider-a', location: riderA.coordinates, label: riderA.label },
+        { id: 'rider-b', location: riderB.coordinates, label: riderB.label },
+      ],
+      destination: destination.coordinates,
+      preferences: {
+        priority: 'balanced_arrival',
+        maxDetourMinutes,
+        limit: 3,
+      },
+    };
 
     try {
-      // In Phase 2, verify input handling & route preview prep
-      // In Phase 3-5, this calls POST /api/v1/meeting-points/search
+      const response = await searchMeetingPoints(requestPayload);
       setIsLoading(false);
-    } catch {
+
+      if (response.routes?.riderA) setRiderARoute(response.routes.riderA);
+      if (response.routes?.riderB) setRiderBRoute(response.routes.riderB);
+
+      if (response.status === 'ok') {
+        setSearchStatus('ok');
+        setRecommendations(response.recommendations);
+        if (response.recommendations.length > 0) {
+          setSelectedCandidateId(response.recommendations[0].id);
+        }
+      } else if (response.status === 'no_candidates') {
+        setSearchStatus('no_candidates');
+        setRecommendations([]);
+        setSelectedCandidateId(null);
+        setWarningMessage(response.warnings?.[0]?.message);
+      }
+    } catch (err) {
       setIsLoading(false);
-      setFormError('An unexpected error occurred. Please try again.');
+      setSearchStatus('error');
+      setFormError((err as Error).message || 'Unable to retrieve meeting points. Please try again.');
     }
   };
 
@@ -98,6 +137,14 @@ export const App: React.FC = () => {
             isLoading={isLoading}
             onSubmit={handleFindMeetingPoint}
             formError={formError}
+          />
+
+          <RecommendationList
+            recommendations={recommendations}
+            status={searchStatus}
+            selectedId={selectedCandidateId}
+            onSelect={(rec) => setSelectedCandidateId(rec.id)}
+            warningMessage={warningMessage}
           />
         </div>
 
