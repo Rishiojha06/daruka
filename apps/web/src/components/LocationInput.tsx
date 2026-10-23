@@ -1,6 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Coordinates } from '@weekend-ride/shared-types';
-import { PlaceSuggestion, searchLocationSuggestions } from '../services/autocomplete.service';
+import {
+  PlaceSuggestion,
+  resolveSuggestionCoordinates,
+  searchLocationSuggestions,
+} from '../services/autocomplete.service';
 import { LocationState } from '../types';
 import { formatCoordinates, parseCoordinates } from '../utils/coordinates';
 import './LocationInput.css';
@@ -26,7 +30,7 @@ interface LocationInputProps {
 export const LocationInput: React.FC<LocationInputProps> = ({
   id,
   label,
-  placeholder = 'Type place name (e.g. Indiranagar, Nandi Hills) or coordinates',
+  placeholder = 'Search place (e.g. Indiranagar, Nandi Hills) or enter address',
   markerLetter,
   markerColor,
   value,
@@ -60,7 +64,6 @@ export const LocationInput: React.FC<LocationInputProps> = ({
     const parsedCoords = parseCoordinates(text);
 
     if (parsedCoords) {
-      // User entered exact coordinates
       setSuggestions([]);
       setIsDropdownOpen(false);
       onChange({
@@ -72,7 +75,6 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       return;
     }
 
-    // Unconfirmed text while typing
     onChange({
       label: text,
       coordinates: null,
@@ -94,18 +96,19 @@ export const LocationInput: React.FC<LocationInputProps> = ({
     }
   };
 
-  const handleSuggestionSelect = (suggestion: PlaceSuggestion) => {
+  const handleSuggestionSelect = async (suggestion: PlaceSuggestion) => {
+    setIsDropdownOpen(false);
+    setSuggestions([]);
+    const coords = await resolveSuggestionCoordinates(suggestion);
     onChange({
       label: suggestion.mainText,
-      coordinates: suggestion.coordinates,
+      coordinates: coords,
       confirmed: true,
       error: undefined,
     });
-    setSuggestions([]);
-    setIsDropdownOpen(false);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (!isDropdownOpen || suggestions.length === 0) return;
 
     if (e.key === 'ArrowDown') {
@@ -117,7 +120,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
     } else if (e.key === 'Enter') {
       if (highlightedIndex >= 0 && highlightedIndex < suggestions.length) {
         e.preventDefault();
-        handleSuggestionSelect(suggestions[highlightedIndex]);
+        await handleSuggestionSelect(suggestions[highlightedIndex]);
       }
     } else if (e.key === 'Escape') {
       setIsDropdownOpen(false);

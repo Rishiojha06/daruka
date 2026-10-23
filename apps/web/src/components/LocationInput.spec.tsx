@@ -56,11 +56,13 @@ describe('LocationInput', () => {
     const suggestionOption = screen.getByRole('option', { name: /nandi hills/i });
     fireEvent.click(suggestionOption);
 
-    expect(onChange).toHaveBeenCalledWith({
-      label: 'Nandi Hills',
-      coordinates: { lat: 13.3702, lng: 77.6835 },
-      confirmed: true,
-      error: undefined,
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith({
+        label: 'Nandi Hills',
+        coordinates: { lat: 13.3702, lng: 77.6835 },
+        confirmed: true,
+        error: undefined,
+      });
     });
   });
 
@@ -81,12 +83,14 @@ describe('LocationInput', () => {
     // Press Enter to select
     fireEvent.keyDown(input, { key: 'Enter' });
 
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        confirmed: true,
-        coordinates: expect.objectContaining({ lat: 12.9352, lng: 77.6245 }),
-      }),
-    );
+    await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith(
+        expect.objectContaining({
+          confirmed: true,
+          coordinates: expect.objectContaining({ lat: 12.9352, lng: 77.6245 }),
+        }),
+      );
+    });
   });
 
   it('selects preset when preset chip is clicked', () => {

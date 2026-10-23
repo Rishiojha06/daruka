@@ -73,6 +73,7 @@ describe('GoogleRoutesAdapter', () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: false,
       status: 503,
+      text: jest.fn().mockResolvedValue('Service Unavailable'),
     });
 
     await expect(adapter.getRoute(origin, destination)).rejects.toThrow(RouteProviderUnavailableException);

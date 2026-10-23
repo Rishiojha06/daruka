@@ -1,15 +1,17 @@
 import { Coordinates } from '@weekend-ride/shared-types';
+import { loadGoogleMaps } from './google-maps-loader';
 
 export interface PlaceSuggestion {
   id: string;
   mainText: string;
   secondaryText: string;
-  coordinates: Coordinates;
+  coordinates?: Coordinates;
+  placeId?: string;
 }
 
 // Built-in indexed places in and around Bengaluru for instant, zero-latency search
 // and reliable fallback when offline or running without a live Google API key
-export const BENGALURU_PLACES_INDEX: PlaceSuggestion[] = [
+export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinates })[] = [
   {
     id: 'blr-nandi-hills',
     mainText: 'Nandi Hills',
@@ -132,86 +134,79 @@ export const BENGALURU_PLACES_INDEX: PlaceSuggestion[] = [
   },
 ];
 
-interface GoogleAutocompletePrediction {
-  place_id: string;
-  description: string;
-  structured_formatting?: {
-    main_text: string;
-    secondary_text: string;
-  };
-}
-
-interface GoogleGeocodeResult {
-  geometry?: {
-    location?: {
-      lat: () => number;
-      lng: () => number;
-    };
-  };
-}
-
-interface GoogleMapsNamespace {
-  maps?: {
-    places?: {
-      AutocompleteService: new () => {
-        getPlacePredictions: (
-          request: { input: string; componentRestrictions?: { country: string } },
-          callback: (predictions: GoogleAutocompletePrediction[] | null, status: string) => void,
-        ) => void;
-      };
-    };
-    Geocoder: new () => {
-      geocode: (
-        request: { placeId: string },
-        callback: (results: GoogleGeocodeResult[] | null, status: string) => void,
-      ) => void;
-    };
-  };
-}
-
 /**
  * Searches location suggestions matching the query.
- * If Google Maps Places Autocomplete is available in the window, queries it.
- * Otherwise, searches the built-in Bengaluru landmarks index.
+ * First checks live Google Places Autocomplete; falls back to built-in index.
  */
 export async function searchLocationSuggestions(query: string): Promise<PlaceSuggestion[]> {
-  const trimmed = query.trim().toLowerCase();
+  const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  // 1. Check if Google Maps JS SDK Places library is loaded on window
-  const google = (window as unknown as { google?: GoogleMapsNamespace }).google;
-  if (google?.maps?.places?.AutocompleteService) {
-    try {
-      const suggestions = await queryGoogleAutocomplete(query, google);
-      if (suggestions.length > 0) {
-        return suggestions;
+  // 1. Try Google Maps Places Autocomplete if available
+  try {
+    const google = await loadGoogleMaps();
+    if (google?.maps?.places?.AutocompleteService) {
+      const liveResults = await queryGoogleAutocomplete(trimmed, google);
+      if (liveResults.length > 0) {
+        return liveResults;
       }
-    } catch {
-      // Fallback to local index
     }
+  } catch {
+    // Google Maps not loaded or key not provided; proceed to local index
   }
 
   // 2. Query built-in local index
+  const lowerQuery = trimmed.toLowerCase();
   return BENGALURU_PLACES_INDEX.filter((place) => {
     return (
-      place.mainText.toLowerCase().includes(trimmed) ||
-      place.secondaryText.toLowerCase().includes(trimmed)
+      place.mainText.toLowerCase().includes(lowerQuery) ||
+      place.secondaryText.toLowerCase().includes(lowerQuery)
     );
   }).slice(0, 5);
 }
 
+/**
+ * Resolves exact coordinates for a selected suggestion.
+ */
+export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion): Promise<Coordinates> {
+  if (suggestion.coordinates) {
+    return suggestion.coordinates;
+  }
+
+  if (suggestion.placeId) {
+    try {
+      const google = await loadGoogleMaps();
+      if (google?.maps?.Geocoder) {
+        const geocoder = new google.maps.Geocoder();
+        const response = await geocoder.geocode({ placeId: suggestion.placeId });
+        if (response.results && response.results[0]?.geometry?.location) {
+          const loc = response.results[0].geometry.location;
+          return {
+            lat: Number(loc.lat().toFixed(6)),
+            lng: Number(loc.lng().toFixed(6)),
+          };
+        }
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  // Default coordinate if unresolved
+  return { lat: 12.9716, lng: 77.5946 };
+}
+
 function queryGoogleAutocomplete(
   input: string,
-  google: GoogleMapsNamespace,
+  google: typeof window.google,
 ): Promise<PlaceSuggestion[]> {
   return new Promise((resolve) => {
-    if (!google.maps?.places?.AutocompleteService || !google.maps?.Geocoder) {
+    if (!google?.maps?.places?.AutocompleteService) {
       resolve([]);
       return;
     }
 
     const service = new google.maps.places.AutocompleteService();
-    const geocoder = new google.maps.Geocoder();
 
     service.getPlacePredictions(
       {
@@ -219,37 +214,22 @@ function queryGoogleAutocomplete(
         componentRestrictions: { country: 'in' },
       },
       (predictions, status) => {
-        if (status !== 'OK' || !predictions) {
+        if (
+          status !== google.maps.places.PlacesServiceStatus.OK ||
+          !predictions
+        ) {
           resolve([]);
           return;
         }
 
-        const topPredictions = predictions.slice(0, 5);
-        const resolved: PlaceSuggestion[] = [];
+        const suggestions: PlaceSuggestion[] = predictions.slice(0, 5).map((pred) => ({
+          id: pred.place_id,
+          placeId: pred.place_id,
+          mainText: pred.structured_formatting?.main_text || pred.description,
+          secondaryText: pred.structured_formatting?.secondary_text || '',
+        }));
 
-        // Geocode each prediction to retrieve coordinates
-        let completed = 0;
-        topPredictions.forEach((pred) => {
-          geocoder.geocode({ placeId: pred.place_id }, (results, geoStatus) => {
-            completed++;
-            if (geoStatus === 'OK' && results?.[0]?.geometry?.location) {
-              const loc = results[0].geometry.location;
-              resolved.push({
-                id: pred.place_id,
-                mainText: pred.structured_formatting?.main_text || pred.description,
-                secondaryText: pred.structured_formatting?.secondary_text || '',
-                coordinates: {
-                  lat: Number(loc.lat().toFixed(6)),
-                  lng: Number(loc.lng().toFixed(6)),
-                },
-              });
-            }
-
-            if (completed === topPredictions.length) {
-              resolve(resolved);
-            }
-          });
-        });
+        resolve(suggestions);
       },
     );
   });

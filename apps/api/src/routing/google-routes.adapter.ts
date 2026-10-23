@@ -230,8 +230,39 @@ export class GoogleRoutesAdapter implements RoutingProvider {
       }
 
       if (!res.ok) {
-        this.logger.error(`Provider request returned HTTP ${res.status}`);
-        throw new RouteProviderUnavailableException(`Provider returned HTTP ${res.status}`);
+        const errorText = await res.text();
+        this.logger.error(`Google API request failed [HTTP ${res.status}]: ${errorText}`);
+
+        let friendlyMessage = `Provider returned HTTP ${res.status}`;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed.error?.message) {
+            friendlyMessage = parsed.error.message;
+          }
+        } catch {
+          // keep generic
+        }
+
+        if (res.status === 403) {
+          if (
+            friendlyMessage.includes('has not been used in project') ||
+            friendlyMessage.includes('is disabled')
+          ) {
+            friendlyMessage =
+              'Google Routes API is not enabled in your Google Cloud Console. Enable "Routes API" in APIs & Services > Library.';
+          } else if (
+            friendlyMessage.toLowerCase().includes('referrer') ||
+            friendlyMessage.toLowerCase().includes('referer')
+          ) {
+            friendlyMessage =
+              'Your server API key has HTTP referrer restrictions. In Google Console > Credentials, set Application restriction to "None" or "IP addresses" for the backend server key.';
+          } else if (friendlyMessage.toLowerCase().includes('billing')) {
+            friendlyMessage =
+              'Google Cloud Billing is not enabled for this project. Please link an active billing account.';
+          }
+        }
+
+        throw new RouteProviderUnavailableException(friendlyMessage);
       }
 
       return res;
