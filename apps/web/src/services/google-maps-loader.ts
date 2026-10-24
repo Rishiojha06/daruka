@@ -36,6 +36,12 @@ export function loadGoogleMaps(): Promise<typeof google> {
     return Promise.reject(new Error('VITE_GOOGLE_MAPS_API_KEY not provided'));
   }
 
+  if (apiKey.length < 35) {
+    console.warn(
+      `[GoogleMapsLoader] Warning: VITE_GOOGLE_MAPS_API_KEY is ${apiKey.length} characters long. Standard Google Cloud API keys are 39 characters. The key in apps/web/.env may be incomplete or truncated.`
+    );
+  }
+
   if (!optionsConfigured) {
     setOptions({
       key: apiKey,

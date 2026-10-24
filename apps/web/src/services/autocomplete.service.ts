@@ -9,6 +9,9 @@ export interface PlaceSuggestion {
   placeId?: string;
 }
 
+// Session token to group autocomplete keystrokes and place details for Google billing optimization
+let currentSessionToken: google.maps.places.AutocompleteSessionToken | null = null;
+
 // Built-in indexed places in and around Bengaluru for instant, zero-latency search
 // and reliable fallback when offline or running without a live Google API key
 export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinates })[] = [
@@ -23,6 +26,18 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     mainText: 'Avalabetta Hilltop',
     secondaryText: 'Chikkaballapur, Karnataka (Scenic Motorcycle Tour)',
     coordinates: { lat: 13.5786, lng: 77.7712 },
+  },
+  {
+    id: 'blr-antaragange',
+    mainText: 'Antaragange Caves',
+    secondaryText: 'Kolar Highway / NH 75, Karnataka',
+    coordinates: { lat: 13.1428, lng: 78.1009 },
+  },
+  {
+    id: 'blr-dd-hills',
+    mainText: 'Devarayanadurga (DD Hills)',
+    secondaryText: 'Tumkur Road, Karnataka (Biker Hill Route)',
+    coordinates: { lat: 13.3742, lng: 77.2117 },
   },
   {
     id: 'blr-whitefield',
@@ -73,6 +88,12 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     coordinates: { lat: 13.2483, lng: 77.7126 },
   },
   {
+    id: 'blr-airport',
+    mainText: 'Kempegowda International Airport (BLR)',
+    secondaryText: 'Airport Road / NH 44, Devanahalli',
+    coordinates: { lat: 13.1986, lng: 77.7066 },
+  },
+  {
     id: 'blr-mg-road',
     mainText: 'MG Road / Trinity Circle',
     secondaryText: 'Central Bengaluru, Karnataka',
@@ -83,6 +104,18 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     mainText: 'Jayanagar 4th Block',
     secondaryText: 'Bengaluru South, Karnataka',
     coordinates: { lat: 12.9299, lng: 77.5824 },
+  },
+  {
+    id: 'blr-jp-nagar',
+    mainText: 'JP Nagar (Brigade Millennium / 24th Main)',
+    secondaryText: 'Bengaluru South, Karnataka',
+    coordinates: { lat: 12.8918, lng: 77.5855 },
+  },
+  {
+    id: 'blr-banashankari',
+    mainText: 'Banashankari (Temple / Ring Road)',
+    secondaryText: 'Bengaluru South, Karnataka',
+    coordinates: { lat: 12.9255, lng: 77.5468 },
   },
   {
     id: 'blr-nice-road-bannerghatta',
@@ -97,8 +130,14 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     coordinates: { lat: 12.8719, lng: 77.5401 },
   },
   {
+    id: 'blr-kanakapura-aol',
+    mainText: 'Kanakapura Road (Art of Living Ashram)',
+    secondaryText: 'NH 948, Bengaluru South',
+    coordinates: { lat: 12.7915, lng: 77.5085 },
+  },
+  {
     id: 'blr-mysore-road-toll',
-    mainText: 'Mysore Road (Kengeri / Bengaluru-Mysuru Expressway Entry)',
+    mainText: 'Mysore Road (Kengeri / Expressway Entry)',
     secondaryText: 'NH 275, Bengaluru West',
     coordinates: { lat: 12.8984, lng: 77.4817 },
   },
@@ -121,6 +160,12 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     coordinates: { lat: 12.9569, lng: 77.7011 },
   },
   {
+    id: 'blr-bellandur',
+    mainText: 'Bellandur (EcoSpace / Outer Ring Road)',
+    secondaryText: 'Bengaluru South-East, Karnataka',
+    coordinates: { lat: 12.926, lng: 77.6762 },
+  },
+  {
     id: 'blr-bannerghatta-np',
     mainText: 'Bannerghatta National Park',
     secondaryText: 'Bannerghatta Road, Bengaluru South',
@@ -132,11 +177,43 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
     secondaryText: 'Bengaluru South-East, Karnataka',
     coordinates: { lat: 12.9102, lng: 77.6834 },
   },
+  {
+    id: 'blr-kr-puram',
+    mainText: 'KR Puram (Hanging Bridge / Tin Factory)',
+    secondaryText: 'Old Madras Road / Outer Ring Road, Bengaluru East',
+    coordinates: { lat: 12.9982, lng: 77.6775 },
+  },
+  {
+    id: 'blr-hoskote',
+    mainText: 'Hoskote Toll Plaza (Highway Breakfast Hub)',
+    secondaryText: 'NH 75, Bengaluru Rural',
+    coordinates: { lat: 13.0712, lng: 77.7981 },
+  },
+  {
+    id: 'blr-malleshwaram',
+    mainText: 'Malleshwaram (8th Main)',
+    secondaryText: 'Bengaluru West, Karnataka',
+    coordinates: { lat: 13.0031, lng: 77.5702 },
+  },
+  {
+    id: 'blr-rajajinagar',
+    mainText: 'Rajajinagar (Orion Mall / 1st Block)',
+    secondaryText: 'Bengaluru West, Karnataka',
+    coordinates: { lat: 13.0111, lng: 77.555 },
+  },
+  {
+    id: 'blr-yeshwanthpur',
+    mainText: 'Yeshwanthpur Junction / Flyover',
+    secondaryText: 'Tumkur Road, Bengaluru North-West',
+    coordinates: { lat: 13.0238, lng: 77.5501 },
+  },
 ];
 
 /**
  * Searches location suggestions matching the query.
- * First checks live Google Places Autocomplete; falls back to built-in index.
+ * 1. Checks modern Google Places Autocomplete (AutocompleteSuggestion - March 2025 standard).
+ * 2. Falls back to legacy Google Places Autocomplete (AutocompleteService).
+ * 3. Falls back to built-in Bengaluru index for instant/offline results.
  */
 export async function searchLocationSuggestions(query: string): Promise<PlaceSuggestion[]> {
   const trimmed = query.trim();
@@ -145,28 +222,42 @@ export async function searchLocationSuggestions(query: string): Promise<PlaceSug
   // 1. Try Google Maps Places Autocomplete if available
   try {
     const google = await loadGoogleMaps();
-    if (google?.maps?.places?.AutocompleteService) {
-      const liveResults = await queryGoogleAutocomplete(trimmed, google);
-      if (liveResults.length > 0) {
-        return liveResults;
+    if (google?.maps?.places) {
+      // 1A. Modern Places API (March 2025+ standard)
+      if (typeof google.maps.places.AutocompleteSuggestion?.fetchAutocompleteSuggestions === 'function') {
+        const modernResults = await queryModernGoogleAutocomplete(trimmed, google);
+        if (modernResults.length > 0) {
+          return modernResults;
+        }
+      }
+
+      // 1B. Legacy Places API fallback (older projects)
+      if (typeof google.maps.places.AutocompleteService === 'function') {
+        const legacyResults = await queryLegacyGoogleAutocomplete(trimmed, google);
+        if (legacyResults.length > 0) {
+          return legacyResults;
+        }
       }
     }
   } catch {
-    // Google Maps not loaded or key not provided; proceed to local index
+    // Google Maps unavailable or key invalid; smoothly proceed to local index
   }
 
   // 2. Query built-in local index
   const lowerQuery = trimmed.toLowerCase();
+  const searchWords = lowerQuery.split(/\s+/).filter(Boolean);
+
   return BENGALURU_PLACES_INDEX.filter((place) => {
-    return (
-      place.mainText.toLowerCase().includes(lowerQuery) ||
-      place.secondaryText.toLowerCase().includes(lowerQuery)
-    );
+    const text = `${place.mainText} ${place.secondaryText}`.toLowerCase();
+    return searchWords.every((word) => text.includes(word));
   }).slice(0, 5);
 }
 
 /**
  * Resolves exact coordinates for a selected suggestion.
+ * 1. Returns embedded coordinates if already present (e.g. from local index).
+ * 2. Uses modern Google Places API Place class (fetchFields).
+ * 3. Uses Geocoder fallback.
  */
 export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion): Promise<Coordinates> {
   if (suggestion.coordinates) {
@@ -176,19 +267,39 @@ export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion):
   if (suggestion.placeId) {
     try {
       const google = await loadGoogleMaps();
+      // 1. Modern Places API Place class
+      if (google?.maps?.places?.Place) {
+        const place = new google.maps.places.Place({
+          id: suggestion.placeId,
+          requestedLanguage: 'en',
+        });
+        await place.fetchFields({
+          fields: ['location', 'displayName', 'formattedAddress'],
+        });
+        if (place.location) {
+          currentSessionToken = null; // Reset session after selection
+          return {
+            lat: Number(place.location.lat().toFixed(6)),
+            lng: Number(place.location.lng().toFixed(6)),
+          };
+        }
+      }
+
+      // 2. Geocoder fallback
       if (google?.maps?.Geocoder) {
         const geocoder = new google.maps.Geocoder();
         const response = await geocoder.geocode({ placeId: suggestion.placeId });
         if (response.results && response.results[0]?.geometry?.location) {
           const loc = response.results[0].geometry.location;
+          currentSessionToken = null;
           return {
             lat: Number(loc.lat().toFixed(6)),
             lng: Number(loc.lng().toFixed(6)),
           };
         }
       }
-    } catch {
-      // Fallback
+    } catch (err) {
+      console.warn('Could not resolve place coordinates via Google API:', err);
     }
   }
 
@@ -196,7 +307,61 @@ export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion):
   return { lat: 12.9716, lng: 77.5946 };
 }
 
-function queryGoogleAutocomplete(
+/**
+ * Modern Google Places Autocomplete using AutocompleteSuggestion (March 2025 standard).
+ */
+async function queryModernGoogleAutocomplete(
+  input: string,
+  google: typeof window.google,
+): Promise<PlaceSuggestion[]> {
+  const places = google?.maps?.places;
+  if (!places || typeof places.AutocompleteSuggestion?.fetchAutocompleteSuggestions !== 'function') {
+    return [];
+  }
+
+  const { AutocompleteSuggestion, AutocompleteSessionToken } = places;
+
+  if (!currentSessionToken && AutocompleteSessionToken) {
+    currentSessionToken = new AutocompleteSessionToken();
+  }
+
+  const request: google.maps.places.AutocompleteRequest = {
+    input,
+    includedRegionCodes: ['in'],
+    origin: { lat: 12.9716, lng: 77.5946 }, // Proximity bias for Bengaluru region
+    ...(currentSessionToken ? { sessionToken: currentSessionToken } : {}),
+  };
+
+  try {
+    const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+    if (!response?.suggestions || response.suggestions.length === 0) {
+      return [];
+    }
+
+    const results: PlaceSuggestion[] = [];
+    for (const s of response.suggestions.slice(0, 5)) {
+      const pred = s.placePrediction;
+      if (pred) {
+        results.push({
+          id: pred.placeId,
+          placeId: pred.placeId,
+          mainText: pred.mainText?.toString() || pred.text?.toString() || input,
+          secondaryText: pred.secondaryText?.toString() || '',
+        });
+      }
+    }
+
+    return results;
+  } catch (err) {
+    console.debug('AutocompleteSuggestion.fetchAutocompleteSuggestions failed:', err);
+    return [];
+  }
+}
+
+/**
+ * Legacy Google Places Autocomplete using AutocompleteService (for older projects).
+ */
+function queryLegacyGoogleAutocomplete(
   input: string,
   google: typeof window.google,
 ): Promise<PlaceSuggestion[]> {
@@ -206,31 +371,34 @@ function queryGoogleAutocomplete(
       return;
     }
 
-    const service = new google.maps.places.AutocompleteService();
+    try {
+      const service = new google.maps.places.AutocompleteService();
+      service.getPlacePredictions(
+        {
+          input,
+          componentRestrictions: { country: 'in' },
+        },
+        (predictions, status) => {
+          if (
+            status !== google.maps.places.PlacesServiceStatus.OK ||
+            !predictions
+          ) {
+            resolve([]);
+            return;
+          }
 
-    service.getPlacePredictions(
-      {
-        input,
-        componentRestrictions: { country: 'in' },
-      },
-      (predictions, status) => {
-        if (
-          status !== google.maps.places.PlacesServiceStatus.OK ||
-          !predictions
-        ) {
-          resolve([]);
-          return;
-        }
+          const suggestions: PlaceSuggestion[] = predictions.slice(0, 5).map((pred) => ({
+            id: pred.place_id,
+            placeId: pred.place_id,
+            mainText: pred.structured_formatting?.main_text || pred.description,
+            secondaryText: pred.structured_formatting?.secondary_text || '',
+          }));
 
-        const suggestions: PlaceSuggestion[] = predictions.slice(0, 5).map((pred) => ({
-          id: pred.place_id,
-          placeId: pred.place_id,
-          mainText: pred.structured_formatting?.main_text || pred.description,
-          secondaryText: pred.structured_formatting?.secondary_text || '',
-        }));
-
-        resolve(suggestions);
-      },
-    );
+          resolve(suggestions);
+        },
+      );
+    } catch {
+      resolve([]);
+    }
   });
 }

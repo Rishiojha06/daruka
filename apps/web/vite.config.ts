@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    host: true,
+    host: 'localhost',
+    hmr: {
+      host: 'localhost',
+    },
   },
   test: {
     globals: true,

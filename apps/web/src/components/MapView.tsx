@@ -40,6 +40,27 @@ export const MapView: React.FC<MapViewProps> = ({
 
   const [isGoogleMapsReady, setIsGoogleMapsReady] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  // Hook into Google Maps global authentication failure event
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const windowWithGm = window as unknown as { gm_authFailure?: () => void };
+    const prevAuthFailure = windowWithGm.gm_authFailure;
+
+    windowWithGm.gm_authFailure = () => {
+      console.warn('Google Maps authentication failure (InvalidKeyMapError). Switching to fallback schematic view.');
+      setAuthError('Google Maps API Key Error (InvalidKeyMapError): The key in apps/web/.env is invalid or truncated. Using interactive fallback map.');
+      setIsGoogleMapsReady(false);
+      if (typeof prevAuthFailure === 'function') {
+        prevAuthFailure();
+      }
+    };
+
+    return () => {
+      windowWithGm.gm_authFailure = prevAuthFailure;
+    };
+  }, []);
 
   // Initialize Google Maps instance
   useEffect(() => {
@@ -324,18 +345,23 @@ export const MapView: React.FC<MapViewProps> = ({
         <div
           ref={mapElementRef}
           className="google-map-element"
-          style={{ width: '100%', height: '100%', display: isGoogleMapsReady ? 'block' : 'none' }}
+          style={{ width: '100%', height: '100%', display: isGoogleMapsReady && !authError ? 'block' : 'none' }}
           role="region"
           aria-label="Google Map with motorcycle routes and meeting points"
         />
 
-        {/* Fallback Preview when Google Maps Key is not provided */}
-        {!isGoogleMapsReady && (
+        {/* Fallback Preview when Google Maps Key is not provided or fails authentication */}
+        {(!isGoogleMapsReady || authError) && (
           <div className="fallback-map-container">
-            {loadError && (
-              <div className="google-key-notice">
+            {(authError || loadError) && (
+              <div className={`google-key-notice ${authError ? 'google-key-error' : ''}`}>
                 <span>
-                  <strong>Interactive Map Preview Active.</strong> To view live Google Maps tiles, add your <code>VITE_GOOGLE_MAPS_API_KEY</code> in <code>apps/web/.env</code>.
+                  <strong>{authError ? 'Google Maps Authentication Notice' : 'Interactive Map Preview Active'}:</strong>{' '}
+                  {authError || (
+                    <>
+                      To view live Google Maps tiles, add your <code>VITE_GOOGLE_MAPS_API_KEY</code> in <code>apps/web/.env</code>.
+                    </>
+                  )}
                 </span>
               </div>
             )}

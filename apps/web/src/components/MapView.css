@@ -109,6 +109,16 @@
   font-family: monospace;
 }
 
+.google-key-notice.google-key-error {
+  background: rgba(254, 242, 242, 0.95);
+  border-color: #f87171;
+  color: #991b1b;
+}
+
+.google-key-notice.google-key-error code {
+  background: #fee2e2;
+}
+
 .cursor-crosshair {
   cursor: crosshair;
 }
