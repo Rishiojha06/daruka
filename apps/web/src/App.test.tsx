@@ -11,7 +11,7 @@ describe('App', () => {
 
   it('renders application header, disclaimer, and map', () => {
     render(<App />);
-    expect(screen.getByRole('heading', { level: 1, name: /weekend ride/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: /daruka/i })).toBeInTheDocument();
     expect(screen.getByRole('note', { name: /beta disclaimer/i })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: /interactive route and location map/i })).toBeInTheDocument();
   });

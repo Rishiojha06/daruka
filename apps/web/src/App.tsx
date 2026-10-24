@@ -113,7 +113,7 @@ export const App: React.FC = () => {
   return (
     <div className="app-container">
       <header className="app-header">
-        <h1>Weekend Ride</h1>
+        <h1>Daruka</h1>
         <p>Motorcycle Meeting-Point Finder</p>
       </header>
 

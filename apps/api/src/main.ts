@@ -27,7 +27,7 @@ async function bootstrap() {
   );
 
   await app.listen(port);
-  console.log(`Weekend Ride API running on: http://localhost:${port}/${apiPrefix.replace(/^\//, '')}`);
+  console.log(`Daruka API running on: http://localhost:${port}/${apiPrefix.replace(/^\//, '')}`);
 }
 
 bootstrap();
