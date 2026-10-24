@@ -5,6 +5,8 @@
   "private": true,
   "scripts": {
     "build": "pnpm --recursive run build",
+    "build:web": "pnpm --filter @weekend-ride/shared-types run build && pnpm --filter @weekend-ride/web run build",
+    "build:api": "pnpm --filter @weekend-ride/shared-types run build && pnpm --filter @weekend-ride/api run build",
     "test": "pnpm --recursive run test",
     "typecheck": "pnpm --recursive run typecheck",
     "lint": "pnpm --recursive run lint",
