@@ -124,6 +124,18 @@ export const MapView: React.FC<MapViewProps> = ({
     }
   }, [activePinTarget]);
 
+  // Trigger Google Maps resize event when ready to ensure complete tile layout
+  useEffect(() => {
+    if (isGoogleMapsReady && googleMapRef.current && typeof google !== 'undefined') {
+      const timer = setTimeout(() => {
+        if (googleMapRef.current) {
+          google.maps.event.trigger(googleMapRef.current, 'resize');
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isGoogleMapsReady]);
+
   // Render Markers and Polylines on Google Map
   useEffect(() => {
     const map = googleMapRef.current;
@@ -345,7 +357,7 @@ export const MapView: React.FC<MapViewProps> = ({
         <div
           ref={mapElementRef}
           className="google-map-element"
-          style={{ width: '100%', height: '100%', display: isGoogleMapsReady && !authError ? 'block' : 'none' }}
+          style={{ visibility: isGoogleMapsReady && !authError ? 'visible' : 'hidden' }}
           role="region"
           aria-label="Google Map with motorcycle routes and meeting points"
         />
