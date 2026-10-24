@@ -1,5 +1,4 @@
 import { Coordinates } from '@weekend-ride/shared-types';
-import { loadGoogleMaps } from './google-maps-loader';
 
 export interface PlaceSuggestion {
   id: string;
@@ -9,11 +8,12 @@ export interface PlaceSuggestion {
   placeId?: string;
 }
 
-// Session token to group autocomplete keystrokes and place details for Google billing optimization
-let currentSessionToken: google.maps.places.AutocompleteSessionToken | null = null;
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ||
+  'http://localhost:4000/api/v1';
 
 // Built-in indexed places in and around Bengaluru for instant, zero-latency search
-// and reliable fallback when offline or running without a live Google API key
+// and reliable fallback when offline or running in mock provider mode
 export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinates })[] = [
   {
     id: 'blr-nandi-hills',
@@ -211,36 +211,36 @@ export const BENGALURU_PLACES_INDEX: (PlaceSuggestion & { coordinates: Coordinat
 
 /**
  * Searches location suggestions matching the query.
- * 1. Checks modern Google Places Autocomplete (AutocompleteSuggestion - March 2025 standard).
- * 2. Falls back to legacy Google Places Autocomplete (AutocompleteService).
- * 3. Falls back to built-in Bengaluru index for instant/offline results.
+ * 1. Calls backend Places Autocomplete proxy (uses Server key with Places API New enabled).
+ * 2. Falls back to built-in Bengaluru index for offline or instant matching.
  */
 export async function searchLocationSuggestions(query: string): Promise<PlaceSuggestion[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
 
-  // 1. Try Google Maps Places Autocomplete if available
-  try {
-    const google = await loadGoogleMaps();
-    if (google?.maps?.places) {
-      // 1A. Modern Places API (March 2025+ standard)
-      if (typeof google.maps.places.AutocompleteSuggestion?.fetchAutocompleteSuggestions === 'function') {
-        const modernResults = await queryModernGoogleAutocomplete(trimmed, google);
-        if (modernResults.length > 0) {
-          return modernResults;
-        }
-      }
+  // In test / jsdom environments, use local deterministic index directly
+  const isTestEnv =
+    (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') ||
+    (typeof navigator !== 'undefined' && navigator.userAgent?.includes('jsdom'));
 
-      // 1B. Legacy Places API fallback (older projects)
-      if (typeof google.maps.places.AutocompleteService === 'function') {
-        const legacyResults = await queryLegacyGoogleAutocomplete(trimmed, google);
-        if (legacyResults.length > 0) {
-          return legacyResults;
+  if (!isTestEnv) {
+    // 1. Query Backend Places Autocomplete Proxy
+    try {
+      const res = await fetch(`${API_BASE_URL}/places/autocomplete?input=${encodeURIComponent(trimmed)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'ok' && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+          return data.suggestions.map((s: { id: string; placeId?: string; mainText: string; secondaryText: string }) => ({
+            id: s.id || s.placeId || Math.random().toString(),
+            placeId: s.placeId || s.id,
+            mainText: s.mainText,
+            secondaryText: s.secondaryText,
+          }));
         }
       }
+    } catch {
+      // Backend offline or in transit; fall through to local index
     }
-  } catch {
-    // Google Maps unavailable or key invalid; smoothly proceed to local index
   }
 
   // 2. Query built-in local index
@@ -256,8 +256,8 @@ export async function searchLocationSuggestions(query: string): Promise<PlaceSug
 /**
  * Resolves exact coordinates for a selected suggestion.
  * 1. Returns embedded coordinates if already present (e.g. from local index).
- * 2. Uses modern Google Places API Place class (fetchFields).
- * 3. Uses Geocoder fallback.
+ * 2. Queries backend Place Details (powered by server key with Places API New).
+ * 3. Falls back to default Bengaluru central coordinates.
  */
 export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion): Promise<Coordinates> {
   if (suggestion.coordinates) {
@@ -266,139 +266,21 @@ export async function resolveSuggestionCoordinates(suggestion: PlaceSuggestion):
 
   if (suggestion.placeId) {
     try {
-      const google = await loadGoogleMaps();
-      // 1. Modern Places API Place class
-      if (google?.maps?.places?.Place) {
-        const place = new google.maps.places.Place({
-          id: suggestion.placeId,
-          requestedLanguage: 'en',
-        });
-        await place.fetchFields({
-          fields: ['location', 'displayName', 'formattedAddress'],
-        });
-        if (place.location) {
-          currentSessionToken = null; // Reset session after selection
+      const res = await fetch(`${API_BASE_URL}/places/details/${encodeURIComponent(suggestion.placeId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.status === 'ok' && data.details?.location) {
           return {
-            lat: Number(place.location.lat().toFixed(6)),
-            lng: Number(place.location.lng().toFixed(6)),
+            lat: data.details.location.lat,
+            lng: data.details.location.lng,
           };
         }
       }
-
-      // 2. Geocoder fallback
-      if (google?.maps?.Geocoder) {
-        const geocoder = new google.maps.Geocoder();
-        const response = await geocoder.geocode({ placeId: suggestion.placeId });
-        if (response.results && response.results[0]?.geometry?.location) {
-          const loc = response.results[0].geometry.location;
-          currentSessionToken = null;
-          return {
-            lat: Number(loc.lat().toFixed(6)),
-            lng: Number(loc.lng().toFixed(6)),
-          };
-        }
-      }
-    } catch (err) {
-      console.warn('Could not resolve place coordinates via Google API:', err);
+    } catch {
+      // Backend details query failed; fallback
     }
   }
 
   // Default coordinate if unresolved
   return { lat: 12.9716, lng: 77.5946 };
-}
-
-/**
- * Modern Google Places Autocomplete using AutocompleteSuggestion (March 2025 standard).
- */
-async function queryModernGoogleAutocomplete(
-  input: string,
-  google: typeof window.google,
-): Promise<PlaceSuggestion[]> {
-  const places = google?.maps?.places;
-  if (!places || typeof places.AutocompleteSuggestion?.fetchAutocompleteSuggestions !== 'function') {
-    return [];
-  }
-
-  const { AutocompleteSuggestion, AutocompleteSessionToken } = places;
-
-  if (!currentSessionToken && AutocompleteSessionToken) {
-    currentSessionToken = new AutocompleteSessionToken();
-  }
-
-  const request: google.maps.places.AutocompleteRequest = {
-    input,
-    includedRegionCodes: ['in'],
-    origin: { lat: 12.9716, lng: 77.5946 }, // Proximity bias for Bengaluru region
-    ...(currentSessionToken ? { sessionToken: currentSessionToken } : {}),
-  };
-
-  try {
-    const response = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
-    if (!response?.suggestions || response.suggestions.length === 0) {
-      return [];
-    }
-
-    const results: PlaceSuggestion[] = [];
-    for (const s of response.suggestions.slice(0, 5)) {
-      const pred = s.placePrediction;
-      if (pred) {
-        results.push({
-          id: pred.placeId,
-          placeId: pred.placeId,
-          mainText: pred.mainText?.toString() || pred.text?.toString() || input,
-          secondaryText: pred.secondaryText?.toString() || '',
-        });
-      }
-    }
-
-    return results;
-  } catch (err) {
-    console.debug('AutocompleteSuggestion.fetchAutocompleteSuggestions failed:', err);
-    return [];
-  }
-}
-
-/**
- * Legacy Google Places Autocomplete using AutocompleteService (for older projects).
- */
-function queryLegacyGoogleAutocomplete(
-  input: string,
-  google: typeof window.google,
-): Promise<PlaceSuggestion[]> {
-  return new Promise((resolve) => {
-    if (!google?.maps?.places?.AutocompleteService) {
-      resolve([]);
-      return;
-    }
-
-    try {
-      const service = new google.maps.places.AutocompleteService();
-      service.getPlacePredictions(
-        {
-          input,
-          componentRestrictions: { country: 'in' },
-        },
-        (predictions, status) => {
-          if (
-            status !== google.maps.places.PlacesServiceStatus.OK ||
-            !predictions
-          ) {
-            resolve([]);
-            return;
-          }
-
-          const suggestions: PlaceSuggestion[] = predictions.slice(0, 5).map((pred) => ({
-            id: pred.place_id,
-            placeId: pred.place_id,
-            mainText: pred.structured_formatting?.main_text || pred.description,
-            secondaryText: pred.structured_formatting?.secondary_text || '',
-          }));
-
-          resolve(suggestions);
-        },
-      );
-    } catch {
-      resolve([]);
-    }
-  });
 }

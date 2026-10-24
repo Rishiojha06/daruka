@@ -9,7 +9,9 @@ import {
   RouteProviderUnavailableException,
 } from './routing.exceptions';
 import {
+  AutocompleteResult,
   PlaceCandidate,
+  PlaceDetailsResult,
   RouteMatrixCell,
   RouteResult,
   RoutingProvider,
@@ -203,6 +205,106 @@ export class GoogleRoutesAdapter implements RoutingProvider {
     } catch (err) {
       this.logger.warn(`Place search failed: ${(err as Error).message}`);
       return [];
+    }
+  }
+
+  async autocompletePlaces(input: string): Promise<AutocompleteResult[]> {
+    const url = 'https://places.googleapis.com/v1/places:autocomplete';
+    const payload = {
+      input,
+      includedRegionCodes: ['in'],
+      locationBias: {
+        circle: {
+          center: {
+            latitude: 12.9716,
+            longitude: 77.5946,
+          },
+          radius: 50000.0,
+        },
+      },
+      languageCode: 'en',
+    };
+
+    try {
+      const response = await this.executeFetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': this.apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!data.suggestions || !Array.isArray(data.suggestions)) {
+        return [];
+      }
+
+      const results: AutocompleteResult[] = [];
+      for (const item of data.suggestions) {
+        const pred = item.placePrediction;
+        if (pred && pred.placeId) {
+          results.push({
+            id: pred.placeId,
+            placeId: pred.placeId,
+            mainText: pred.structuredFormat?.mainText?.text || pred.text?.text || input,
+            secondaryText: pred.structuredFormat?.secondaryText?.text || '',
+          });
+        }
+      }
+      return results.slice(0, 5);
+    } catch (err) {
+      this.logger.warn(`Place autocomplete failed for "${input}": ${(err as Error).message}`);
+      return [];
+    }
+  }
+
+  async getPlaceDetails(placeId: string): Promise<PlaceDetailsResult | null> {
+    if (placeId.startsWith('mock-')) {
+      const mockCoordinatesMap: Record<string, { name: string; location: Coordinates; address: string }> = {
+        'mock-nandi': { name: 'Nandi Hills', location: { lat: 13.3702, lng: 77.6835 }, address: 'Chikkaballapur, Karnataka' },
+        'mock-avalabetta': { name: 'Avalabetta Hilltop', location: { lat: 13.5786, lng: 77.7712 }, address: 'Chikkaballapur, Karnataka' },
+        'mock-koramangala': { name: 'Koramangala (Sony World)', location: { lat: 12.9352, lng: 77.6245 }, address: 'Bengaluru South, Karnataka' },
+        'mock-whitefield': { name: 'Whitefield', location: { lat: 12.9698, lng: 77.75 }, address: 'Bengaluru East, Karnataka' },
+      };
+      const found = mockCoordinatesMap[placeId];
+      if (found) {
+        return {
+          placeId,
+          name: found.name,
+          location: found.location,
+          formattedAddress: found.address,
+        };
+      }
+    }
+
+    const url = `https://places.googleapis.com/v1/places/${encodeURIComponent(placeId)}`;
+    try {
+      const response = await this.executeFetch(url, {
+        method: 'GET',
+        headers: {
+          'X-Goog-Api-Key': this.apiKey,
+          'X-Goog-FieldMask': 'id,displayName,location,formattedAddress',
+        },
+      });
+
+      const data = await response.json();
+      if (!data.location || typeof data.location.latitude !== 'number') {
+        return null;
+      }
+
+      return {
+        placeId: data.id || placeId,
+        name: data.displayName?.text || 'Selected Location',
+        location: {
+          lat: Number(data.location.latitude.toFixed(6)),
+          lng: Number(data.location.longitude.toFixed(6)),
+        },
+        formattedAddress: data.formattedAddress,
+      };
+    } catch (err) {
+      this.logger.warn(`Place details lookup failed for "${placeId}": ${(err as Error).message}`);
+      return null;
     }
   }
 

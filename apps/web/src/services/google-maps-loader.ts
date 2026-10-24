@@ -52,7 +52,6 @@ export function loadGoogleMaps(): Promise<typeof google> {
 
   loaderPromise = Promise.all([
     importLibrary('maps'),
-    importLibrary('places'),
     importLibrary('geometry'),
   ]).then(() => {
     if (window.google) {

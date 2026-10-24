@@ -82,4 +82,27 @@ describe('AppController (e2e)', () => {
       .send(invalidPayload)
       .expect(400);
   });
+
+  it('/api/v1/places/autocomplete (GET) - returns suggestions', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/places/autocomplete?input=nandi')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status).toBe('ok');
+        expect(Array.isArray(res.body.suggestions)).toBe(true);
+        expect(res.body.suggestions.length).toBeGreaterThan(0);
+        expect(res.body.suggestions[0].mainText).toContain('Nandi Hills');
+      });
+  });
+
+  it('/api/v1/places/details/:placeId (GET) - returns place details', () => {
+    return request(app.getHttpServer())
+      .get('/api/v1/places/details/mock-nandi')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body.status).toBe('ok');
+        expect(res.body.details).toBeDefined();
+        expect(res.body.details.location.lat).toBeCloseTo(13.3702, 2);
+      });
+  });
 });

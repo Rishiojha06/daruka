@@ -29,6 +29,20 @@ export interface PlaceCandidate {
   address?: string;
 }
 
+export interface AutocompleteResult {
+  id: string;
+  placeId?: string;
+  mainText: string;
+  secondaryText: string;
+}
+
+export interface PlaceDetailsResult {
+  placeId: string;
+  name: string;
+  location: Coordinates;
+  formattedAddress?: string;
+}
+
 export interface RoutingProvider {
   getRoute(origin: Coordinates, destination: Coordinates): Promise<RouteResult>;
   getRouteMatrix(
@@ -40,6 +54,8 @@ export interface RoutingProvider {
     categories: string[],
     radiusMeters: number,
   ): Promise<PlaceCandidate[]>;
+  autocompletePlaces?(input: string): Promise<AutocompleteResult[]>;
+  getPlaceDetails?(placeId: string): Promise<PlaceDetailsResult | null>;
   buildDirectionsUrl(destination: Coordinates, origin?: Coordinates): string;
 }
 
