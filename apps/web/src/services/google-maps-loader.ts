@@ -63,7 +63,3 @@ export function loadGoogleMaps(): Promise<typeof google> {
   return loaderPromise;
 }
 
-export function isGoogleMapsLoaded(): boolean {
-  return typeof window !== 'undefined' && Boolean(window.google?.maps);
-}
-

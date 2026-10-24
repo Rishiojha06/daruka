@@ -48,7 +48,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   const wrapperRef = useRef<HTMLDivElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Close dropdown on outside click
+  // Close dropdown on outside click and cleanup debounce timer
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
       if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
@@ -56,7 +56,10 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
   }, []);
 
   const handleTextChange = (e: React.ChangeEvent<HTMLInputElement>) => {

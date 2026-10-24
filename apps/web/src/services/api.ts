@@ -3,14 +3,8 @@ import {
   MeetingPointSearchResponse,
 } from '@weekend-ride/shared-types';
 
-interface CustomImportMeta {
-  env?: {
-    VITE_API_BASE_URL?: string;
-  };
-}
-
 const API_BASE_URL =
-  (import.meta as unknown as CustomImportMeta).env?.VITE_API_BASE_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
   'http://localhost:4000/api/v1';
 
 export async function searchMeetingPoints(
