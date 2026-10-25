@@ -1,10 +1,18 @@
 import { Coordinates } from '@weekend-ride/shared-types';
 
+export interface RouteAlternative {
+  distanceMeters: number;
+  durationSeconds: number;
+  encodedPolyline?: string;
+  geometry: Coordinates[];
+}
+
 export interface RouteResult {
   distanceMeters: number;
   durationSeconds: number;
   encodedPolyline?: string;
   geometry: Coordinates[];
+  alternatives?: RouteAlternative[];
   providerMetadata?: {
     trafficAware?: boolean;
     travelMode?: string;

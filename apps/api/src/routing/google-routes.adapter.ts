@@ -50,8 +50,8 @@ export class GoogleRoutesAdapter implements RoutingProvider {
         },
       },
       travelMode: 'TWO_WHEELER',
-      routingPreference: 'TRAFFIC_AWARE',
       polylineQuality: 'HIGH_QUALITY',
+      computeAlternativeRoutes: true,
     };
 
     const response = await this.executeFetch(url, {
@@ -76,13 +76,24 @@ export class GoogleRoutesAdapter implements RoutingProvider {
     const encodedPolyline = route.polyline?.encodedPolyline || '';
     const geometry = encodedPolyline ? decodePolyline(encodedPolyline) : [origin, destination];
 
+    const alternatives = (data.routes.slice(1) || []).map((r: any) => {
+      const altPolyline = r.polyline?.encodedPolyline || '';
+      return {
+        distanceMeters: r.distanceMeters || 0,
+        durationSeconds: this.parseDurationSeconds(r.duration),
+        encodedPolyline: altPolyline,
+        geometry: altPolyline ? decodePolyline(altPolyline) : [origin, destination],
+      };
+    });
+
     return {
       distanceMeters,
       durationSeconds,
       encodedPolyline,
       geometry,
+      alternatives,
       providerMetadata: {
-        trafficAware: true,
+        trafficAware: false,
         travelMode: 'TWO_WHEELER',
       },
     };
@@ -115,7 +126,6 @@ export class GoogleRoutesAdapter implements RoutingProvider {
         },
       })),
       travelMode: 'TWO_WHEELER',
-      routingPreference: 'TRAFFIC_AWARE',
     };
 
     const response = await this.executeFetch(url, {

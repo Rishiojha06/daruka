@@ -29,17 +29,20 @@ export interface ScoringWeights {
   alpha: number; // weight for arrival gap
   beta: number; // weight for max approach
   gamma: number; // weight for total detour
+  delta?: number; // weight for shared ride onward duration (rewards earlier meeting)
 }
 
 export const DEFAULT_WEIGHTS: ScoringWeights = {
   alpha: 3.0,
   beta: 1.0,
   gamma: 1.0,
+  delta: 0.5,
 };
 
 /**
  * Validates and scores candidates, sorting by best score ascending.
  * Rejects candidates violating reachability, valid durations, or detour limits.
+ * Rewards earlier meetings via onward shared travel time credit (delta * tOnwardMinutes).
  */
 export function scoreAndRankCandidates(
   candidates: CandidateEvaluationInput[],
@@ -83,11 +86,15 @@ export function scoreAndRankCandidates(
     const arrivalGapMinutes = arrivalDiffSeconds / 60;
     const maxApproachMinutes = Math.max(c.tASeconds, c.tBSeconds) / 60;
     const totalDetourMinutes = (detourASeconds + detourBSeconds) / 60;
+    const onwardMinutes = c.tOnwardSeconds / 60;
+    const deltaWeight = weights.delta ?? 0.5;
 
+    // Multiobjective cost function with shared-ride credit (lower score is better)
     const rawScore =
       weights.alpha * arrivalGapMinutes +
       weights.beta * maxApproachMinutes +
-      weights.gamma * totalDetourMinutes;
+      weights.gamma * totalDetourMinutes -
+      deltaWeight * onwardMinutes;
 
     if (!isFinite(rawScore) || isNaN(rawScore)) {
       continue;
@@ -111,7 +118,7 @@ export function scoreAndRankCandidates(
   // Stable deterministic sort:
   // 1. Lowest score first
   // 2. Tie-break: lowest arrivalDifferenceSeconds
-  // 3. Tie-break: lowest onward journey duration
+  // 3. Tie-break: highest onward journey duration (riding together longer)
   // 4. Tie-break: alphabetical ID
   scored.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
@@ -119,7 +126,7 @@ export function scoreAndRankCandidates(
       return a.arrivalDifferenceSeconds - b.arrivalDifferenceSeconds;
     }
     if (a.tOnwardSeconds !== b.tOnwardSeconds) {
-      return a.tOnwardSeconds - b.tOnwardSeconds;
+      return b.tOnwardSeconds - a.tOnwardSeconds;
     }
     return a.id.localeCompare(b.id);
   });

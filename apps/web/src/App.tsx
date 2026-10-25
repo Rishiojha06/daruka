@@ -118,7 +118,7 @@ export const App: React.FC = () => {
       </header>
 
       <div className="beta-disclaimer" role="note" aria-label="Beta Disclaimer">
-        <strong>Notice:</strong> Motorcycle routes and arrival estimates are based on current provider data and traffic snapshots. Always verify road conditions and legal motorcycle access before riding.
+        <strong>Notice:</strong> Motorcycle routes and arrival estimates are based on current provider data and road network data. Always verify road conditions and legal motorcycle access before riding.
       </div>
 
       <div className="app-main-grid">

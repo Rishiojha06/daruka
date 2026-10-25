@@ -85,4 +85,35 @@ describe('GoogleRoutesAdapter', () => {
     expect(url).toContain('origin=12.9698,77.75');
     expect(url).toContain('travelmode=two_wheeler');
   });
+  it('parses alternative routes when returned by Google Routes API', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        routes: [
+          {
+            distanceMeters: 45000,
+            duration: '3600s',
+            polyline: {
+              encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@',
+            },
+          },
+          {
+            distanceMeters: 48000,
+            duration: '3800s',
+            polyline: {
+              encodedPolyline: '_p~iF~ps|U_ulLnnqC_mqNvxq`@',
+            },
+          },
+        ],
+      }),
+    });
+
+    const result = await adapter.getRoute(origin, destination);
+    expect(result.alternatives).toBeDefined();
+    expect(result.alternatives?.length).toBe(1);
+    expect(result.alternatives?.[0].distanceMeters).toBe(48000);
+    expect(result.alternatives?.[0].durationSeconds).toBe(3800);
+  });
+
 });

@@ -7,22 +7,26 @@ export interface GeneratedCandidatePoint {
   location: Coordinates;
   source: 'convergence' | 'proximity' | 'corridor_seed';
   sampleDistanceMeters?: number;
+  distToDest?: number;
 }
 
 export interface CandidateGenerationOptions {
   sampleIntervalMeters?: number;
   dedupRadiusMeters?: number;
   maxCandidates?: number;
+  maxSeparationMeters?: number;
 }
 
 const DEFAULT_OPTIONS: Required<CandidateGenerationOptions> = {
   sampleIntervalMeters: 1000,
   dedupRadiusMeters: 2500,
   maxCandidates: 10,
+  maxSeparationMeters: 3500,
 };
 
 /**
- * Generates bounded, deduplicated road-based candidate meeting points from route geometries.
+ * Generates bounded, deduplicated road-based candidate meeting points from route geometries,
+ * sampling across all primary and alternative route combinations (A_i x B_j).
  */
 export function generateCandidatePoints(
   routeA: RouteResult,
@@ -33,59 +37,92 @@ export function generateCandidatePoints(
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const rawCandidates: GeneratedCandidatePoint[] = [];
 
-  const sampledA = samplePolyline(routeA.geometry, opts.sampleIntervalMeters);
-  const sampledB = samplePolyline(routeB.geometry, opts.sampleIntervalMeters);
+  // Gather all primary and alternative geometries for both riders
+  const geometriesA = [routeA.geometry, ...(routeA.alternatives?.map((a) => a.geometry) || [])];
+  const geometriesB = [routeB.geometry, ...(routeB.alternatives?.map((b) => b.geometry) || [])];
+
+  const sampledListA = geometriesA.map((g) => samplePolyline(g, opts.sampleIntervalMeters));
+  const sampledListB = geometriesB.map((g) => samplePolyline(g, opts.sampleIntervalMeters));
 
   let candidateIndex = 1;
 
-  // Pass 1: Identify direct convergence / proximity between sampled vertices
-  // Only evaluate pairs not too close to origin (at least 2km away from starts)
-  for (let i = 2; i < sampledA.length; i++) {
-    const ptA = sampledA[i];
-    // Exclude points extremely close to destination (< 1.5 km) as meeting at the destination defeats the purpose
-    if (haversineDistanceMeters(ptA, destination) < 1500) continue;
+  // Pass 1: Cross-route convergence & proximity across all route alternative combinations (A_i x B_j)
+  for (let aIdx = 0; aIdx < sampledListA.length; aIdx++) {
+    const sampledA = sampledListA[aIdx];
+    for (let bIdx = 0; bIdx < sampledListB.length; bIdx++) {
+      const sampledB = sampledListB[bIdx];
 
-    for (let j = 2; j < sampledB.length; j++) {
-      const ptB = sampledB[j];
-      if (haversineDistanceMeters(ptB, destination) < 1500) continue;
+      // Only evaluate vertices away from origin (skip first 2km from starts)
+      for (let i = 2; i < sampledA.length; i++) {
+        const ptA = sampledA[i];
+        const distDestA = haversineDistanceMeters(ptA, destination);
+        if (distDestA < 1500) continue;
 
-      const separation = haversineDistanceMeters(ptA, ptB);
+        for (let j = 2; j < sampledB.length; j++) {
+          const ptB = sampledB[j];
+          const distDestB = haversineDistanceMeters(ptB, destination);
+          if (distDestB < 1500) continue;
 
-      // If routes are close (within 2 km of each other)
-      if (separation <= 2000) {
-        rawCandidates.push({
-          id: `cand-${candidateIndex++}`,
-          location: ptA, // Use verified route vertex to guarantee road snapping (Phase 0 Gap 2 fix)
-          source: separation < 500 ? 'convergence' : 'proximity',
-          sampleDistanceMeters: separation,
-        });
+          const separation = haversineDistanceMeters(ptA, ptB);
+
+          // If routes are within separation threshold
+          if (separation <= opts.maxSeparationMeters) {
+            rawCandidates.push({
+              id: `cand-${candidateIndex++}`,
+              location: ptA, // Verified route vertex guaranteeing road snapping
+              source: separation < 500 ? 'convergence' : 'proximity',
+              sampleDistanceMeters: separation,
+              distToDest: distDestA,
+            });
+
+            // If separation is noticeable, also evaluate road vertex from Route B
+            if (separation > 300) {
+              rawCandidates.push({
+                id: `cand-${candidateIndex++}`,
+                location: ptB,
+                source: 'proximity',
+                sampleDistanceMeters: separation,
+                distToDest: distDestB,
+              });
+            }
+          }
+        }
       }
     }
   }
 
-  // Pass 2: If no convergence/proximity candidates found (e.g. routes completely divergent until destination)
-  // Inject corridor candidates along midpoint vertices of each route (Phase 0 Gap 4 fix)
+  // Pass 2: If no convergence/proximity candidates found across any alternatives
+  // Inject corridor candidates along midpoint vertices of each primary route
   if (rawCandidates.length === 0) {
-    const midIndexA = Math.floor(sampledA.length * 0.5);
-    const midIndexB = Math.floor(sampledB.length * 0.5);
+    const primaryA = sampledListA[0] || [];
+    const primaryB = sampledListB[0] || [];
+    const midIndexA = Math.floor(primaryA.length * 0.5);
+    const midIndexB = Math.floor(primaryB.length * 0.5);
 
-    if (sampledA[midIndexA]) {
+    if (primaryA[midIndexA]) {
       rawCandidates.push({
         id: `cand-${candidateIndex++}`,
-        location: sampledA[midIndexA],
+        location: primaryA[midIndexA],
         source: 'corridor_seed',
+        distToDest: haversineDistanceMeters(primaryA[midIndexA], destination),
       });
     }
-    if (sampledB[midIndexB]) {
+    if (primaryB[midIndexB]) {
       rawCandidates.push({
         id: `cand-${candidateIndex++}`,
-        location: sampledB[midIndexB],
+        location: primaryB[midIndexB],
         source: 'corridor_seed',
+        distToDest: haversineDistanceMeters(primaryB[midIndexB], destination),
       });
     }
   }
 
-  // Pass 3: Deduplication by spatial radius (Phase 0 Gap 3 fix)
+  // Sort candidates by earliest point along the corridor (highest distance to destination)
+  // This guarantees candidate slots are not monopolized by late convergence near the finish line,
+  // ensuring early, mid, and late meeting options along the route are evenly considered.
+  rawCandidates.sort((a, b) => (b.distToDest ?? 0) - (a.distToDest ?? 0));
+
+  // Pass 3: Deduplication by spatial radius
   const deduplicated: GeneratedCandidatePoint[] = [];
 
   for (const cand of rawCandidates) {

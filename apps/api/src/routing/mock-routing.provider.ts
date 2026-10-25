@@ -35,12 +35,31 @@ export class MockRoutingProvider implements RoutingProvider {
       });
     }
 
+    // Generate alternative route geometry with opposite curve
+    const altGeometry: Coordinates[] = [];
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const intermediate = interpolateCoordinates(origin, destination, t);
+      const wobble = -Math.sin(t * Math.PI) * 0.008;
+      altGeometry.push({
+        lat: Number((intermediate.lat + wobble).toFixed(6)),
+        lng: Number((intermediate.lng - wobble).toFixed(6)),
+      });
+    }
+
     return {
       distanceMeters,
       durationSeconds,
       geometry,
+      alternatives: [
+        {
+          distanceMeters: Math.round(distanceMeters * 1.05),
+          durationSeconds: Math.round(durationSeconds * 1.05),
+          geometry: altGeometry,
+        },
+      ],
       providerMetadata: {
-        trafficAware: true,
+        trafficAware: false,
         travelMode: 'TWO_WHEELER',
       },
     };

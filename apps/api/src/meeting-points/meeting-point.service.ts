@@ -5,6 +5,7 @@ import {
   RouteSummary,
 } from '@weekend-ride/shared-types';
 import { generateCandidatePoints } from '../algorithm/candidate.engine';
+import { haversineDistanceMeters } from '../common/geo.utils';
 import { CandidateEvaluationInput, scoreAndRankCandidates } from '../algorithm/scoring.engine';
 import { ROUTING_PROVIDER, RoutingProvider } from '../routing/routing.types';
 import { SearchMeetingPointsDto } from './dto/search-meeting-points.dto';
@@ -194,10 +195,56 @@ export class MeetingPointService {
       });
     }
 
+    // Align the displayed route polylines to whichever primary or alternative route
+    // actually passes through/closest to the top-ranked meeting point.
+    let displayRouteA = routeSummaries.riderA;
+    let displayRouteB = routeSummaries.riderB;
+
+    if (topScored.length > 0) {
+      const topLoc = topScored[0].location;
+
+      const allRoutesA = [routeAResult, ...(routeAResult.alternatives || [])];
+      let minDistA = Infinity;
+      for (const r of allRoutesA) {
+        for (const pt of r.geometry) {
+          const d = haversineDistanceMeters(pt, topLoc);
+          if (d < minDistA) {
+            minDistA = d;
+            displayRouteA = {
+              distanceMeters: r.distanceMeters,
+              durationSeconds: r.durationSeconds,
+              geometry: r.geometry,
+              encodedPolyline: r.encodedPolyline,
+            };
+          }
+        }
+      }
+
+      const allRoutesB = [routeBResult, ...(routeBResult.alternatives || [])];
+      let minDistB = Infinity;
+      for (const r of allRoutesB) {
+        for (const pt of r.geometry) {
+          const d = haversineDistanceMeters(pt, topLoc);
+          if (d < minDistB) {
+            minDistB = d;
+            displayRouteB = {
+              distanceMeters: r.distanceMeters,
+              durationSeconds: r.durationSeconds,
+              geometry: r.geometry,
+              encodedPolyline: r.encodedPolyline,
+            };
+          }
+        }
+      }
+    }
+
     return {
       status: 'ok',
       generatedAt: new Date().toISOString(),
-      routes: routeSummaries,
+      routes: {
+        riderA: displayRouteA,
+        riderB: displayRouteB,
+      },
       recommendations: enrichedRecommendations,
       warnings: [],
     };

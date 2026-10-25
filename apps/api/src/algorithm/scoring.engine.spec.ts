@@ -106,4 +106,14 @@ describe('ScoringEngine', () => {
     expect(Number.isFinite(results[0].score)).toBe(true);
     expect(Number.isNaN(results[0].score)).toBe(false);
   });
+  it('favors meeting earlier to ride together longer when arrival balance and detours are similar', () => {
+    // Both early and late have 0s arrival diff and modest 100s/400s detours
+    const early = createCandidate('early', 600, 600, 1900);
+    const late = createCandidate('late', 1900, 1900, 600);
+
+    const results = scoreAndRankCandidates([late, early], maxDetour);
+    expect(results).toHaveLength(2);
+    expect(results[0].id).toBe('early');
+  });
+
 });

@@ -499,7 +499,7 @@ export const MapView: React.FC<MapViewProps> = ({
         )}
 
         <div className="map-coordinates-bar">
-          <span>Bengaluru Region (Two-Wheeler Traffic Enabled)</span>
+          <span>Bengaluru Region (Two-Wheeler Routing)</span>
           {activePinTarget && <span className="pin-active-tag">Click anywhere on map to place pin</span>}
         </div>
       </div>
