@@ -25,6 +25,7 @@ interface LocationInputProps {
   isPinActive: boolean;
   onTogglePin: () => void;
   presets?: PresetOption[];
+  onInputFocus?: () => void;
 }
 
 export const LocationInput: React.FC<LocationInputProps> = ({
@@ -38,6 +39,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   isPinActive,
   onTogglePin,
   presets = [],
+  onInputFocus,
 }) => {
   const [geoLoading, setGeoLoading] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
@@ -46,6 +48,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Close dropdown on outside click and cleanup debounce timer
@@ -109,6 +112,8 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       confirmed: true,
       error: undefined,
     });
+    // Dismiss keyboard on mobile after selection
+    inputRef.current?.blur();
   };
 
   const handleKeyDown = async (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -138,6 +143,7 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       error: undefined,
     });
     setIsDropdownOpen(false);
+    inputRef.current?.blur();
   };
 
   const handleGeolocation = () => {
@@ -185,10 +191,22 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       coordinates: null,
       confirmed: false,
     });
+    inputRef.current?.focus();
+  };
+
+  const handleFocus = () => {
+    onInputFocus?.();
+    if (suggestions.length > 0 && !value.confirmed) {
+      setIsDropdownOpen(true);
+    }
+    // Mobile smooth auto-scroll to keep input above keyboard
+    setTimeout(() => {
+      wrapperRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 100);
   };
 
   return (
-    <div className="location-input-group" ref={wrapperRef}>
+    <div className={`location-input-group ${value.confirmed ? 'group-confirmed' : ''}`} ref={wrapperRef}>
       <div className="location-header">
         <label htmlFor={id} className="location-label">
           <span
@@ -202,42 +220,44 @@ export const LocationInput: React.FC<LocationInputProps> = ({
         </label>
         {value.confirmed && value.coordinates && (
           <span className="confirmed-pill" title={formatCoordinates(value.coordinates)}>
-            ✓ {formatCoordinates(value.coordinates)}
+            <span className="confirmed-check">✓</span>
+            <span className="confirmed-coords">{formatCoordinates(value.coordinates)}</span>
           </span>
         )}
       </div>
 
       <div className="input-row">
-        <input
-          id={id}
-          type="text"
-          className={`location-text-input ${value.error ? 'input-error' : ''}`}
-          placeholder={placeholder}
-          value={value.label}
-          onChange={handleTextChange}
-          onKeyDown={handleKeyDown}
-          onFocus={() => {
-            if (suggestions.length > 0 && !value.confirmed) {
-              setIsDropdownOpen(true);
-            }
-          }}
-          autoComplete="off"
-          aria-autocomplete="list"
-          aria-expanded={isDropdownOpen}
-          aria-describedby={value.error ? `${id}-error` : undefined}
-        />
-        {value.label && (
-          <button
-            type="button"
-            className="btn-clear"
-            onClick={handleClear}
-            aria-label={`Clear ${label}`}
-          >
-            ✕
-          </button>
-        )}
+        <div className="input-field-container">
+          <span className="search-icon" aria-hidden="true">🔍</span>
+          <input
+            id={id}
+            ref={inputRef}
+            type="text"
+            className={`location-text-input ${value.error ? 'input-error' : ''} ${value.confirmed ? 'input-confirmed' : ''}`}
+            placeholder={placeholder}
+            value={value.label}
+            onChange={handleTextChange}
+            onKeyDown={handleKeyDown}
+            onFocus={handleFocus}
+            autoComplete="off"
+            aria-autocomplete="list"
+            aria-expanded={isDropdownOpen}
+            aria-describedby={value.error ? `${id}-error` : undefined}
+          />
+          {value.label && (
+            <button
+              type="button"
+              className="btn-clear"
+              onClick={handleClear}
+              aria-label={`Clear ${label}`}
+              title="Clear input"
+            >
+              ✕
+            </button>
+          )}
+        </div>
 
-        {/* Autocomplete Dropdown List */}
+        {/* Autocomplete Dropdown List with Smart Positioning */}
         {isDropdownOpen && suggestions.length > 0 && (
           <ul
             className="autocomplete-dropdown"
@@ -271,24 +291,28 @@ export const LocationInput: React.FC<LocationInputProps> = ({
       </div>
 
       <div className="action-row">
-        <button
-          type="button"
-          className="btn-action btn-geo"
-          onClick={handleGeolocation}
-          disabled={geoLoading}
-          aria-label={`Use my current location for ${label}`}
-        >
-          {geoLoading ? 'Detecting...' : '📍 GPS'}
-        </button>
+        <div className="action-buttons-group">
+          <button
+            type="button"
+            className="btn-action btn-geo"
+            onClick={handleGeolocation}
+            disabled={geoLoading}
+            aria-label={`Use my current location for ${label}`}
+          >
+            <span className="action-icon">📍</span>
+            <span>{geoLoading ? 'Detecting...' : 'GPS'}</span>
+          </button>
 
-        <button
-          type="button"
-          className={`btn-action btn-pin ${isPinActive ? 'btn-pin-active' : ''}`}
-          onClick={onTogglePin}
-          aria-pressed={isPinActive}
-        >
-          {isPinActive ? '📍 Click Map to Place' : '📌 Pick on Map'}
-        </button>
+          <button
+            type="button"
+            className={`btn-action btn-pin ${isPinActive ? 'btn-pin-active' : ''}`}
+            onClick={onTogglePin}
+            aria-pressed={isPinActive}
+          >
+            <span className="action-icon">📌</span>
+            <span>{isPinActive ? 'Click Map to Place' : 'Pick on Map'}</span>
+          </button>
+        </div>
 
         {presets.length > 0 && (
           <div className="preset-chips" role="group" aria-label={`Presets for ${label}`}>
